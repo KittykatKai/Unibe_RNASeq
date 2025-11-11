@@ -39,8 +39,8 @@ sample=${samples[$SLURM_ARRAY_TASK_ID]}
 
 # Run FastQC using Apptainer container
 apptainer exec "$CONTAINER" fastqc \
-    "$INPUT_DIR"/${sample}_1_trimmed.fastq.qz \
-    "$INPUT_DIR"/${sample}_2_trimmed.fastq.qz \
+    "$INPUT_DIR"/${sample}_1_trimmed.fastq.gz \
+    "$INPUT_DIR"/${sample}_2_trimmed.fastq.gz \
     -o "$OUTPUT_DIR" \
     -t $SLURM_CPUS_PER_TASK
     
