@@ -13,10 +13,9 @@
 # Set Paths
 CONTAINER="/containers/apptainer/fastp_0.24.1.sif"
 INPUT_DIR="/data/users/ksales/reads_Blood"
-OUTPUT_DIR="/data/users/ksales/output_dir"
+OUTPUT_DIR="/data/users/ksales/Unibe_RNASeq/trimmedreads_Blood"
 
-
-# Array of sample IDs (using array in this situation is more efficent)
+# Array of sample IDs
 samples=(
     SRR7821949
     SRR7821950
@@ -35,9 +34,8 @@ samples=(
     SRR7821973
 )
 
-#  sample for array
+# Get sample for array
 sample=${samples[$SLURM_ARRAY_TASK_ID]}
-
 
 apptainer exec --bind /data:/data "$CONTAINER" fastp \
     -i "$INPUT_DIR"/${sample}_1.fastq.gz \
@@ -46,5 +44,10 @@ apptainer exec --bind /data:/data "$CONTAINER" fastp \
     -O "$OUTPUT_DIR"/${sample}_2_trimmed.fastq.gz \
     -h "$OUTPUT_DIR"/${sample}_fastp.html \
     -j "$OUTPUT_DIR"/${sample}_fastp.json \
-    --thread 4
-
+    --thread 4 \
+    --detect_adapter_for_pe \
+    --length_required 20 \
+    --cut_front \
+    --cut_tail \
+    --cut_window_size 4 \
+    --cut_mean_quality 20
