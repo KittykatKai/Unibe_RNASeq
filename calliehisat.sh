@@ -25,7 +25,6 @@ INDEX_LOCK="${INDEX_DIR}/.index_complete"
 if [[ ${SLURM_ARRAY_TASK_ID} -eq 0 ]]; then
     # Check if index already exists
     if [[ ! -f "${INDEX_PREFIX}.1.ht2" ]]; then
-        echo "Building HISAT2 index..."
         apptainer exec --bind /data ${CONTAINER} hisat2-build \
             -p ${SLURM_CPUS_PER_TASK} \
             ${GENOME_FA} \
@@ -33,20 +32,16 @@ if [[ ${SLURM_ARRAY_TASK_ID} -eq 0 ]]; then
         
         # Create lock file to signal completion
         touch ${INDEX_LOCK}
-        echo "Index building complete!"
     else
-        echo "Index already exists, skipping build."
         touch ${INDEX_LOCK}
     fi
 else
     # Other tasks wait for task 0 to finish building the index
-    echo "Waiting for index to be built by task 0..."
     while [[ ! -f ${INDEX_LOCK} ]]; do
         sleep 30
     done
     # Extra wait to ensure all index files are fully written
     sleep 10
-    echo "Index is ready, proceeding with alignment."
 fi
 
 # Array of sample IDs
@@ -77,7 +72,6 @@ R2="${READS_DIR}/${SAMPLE}_2_trimmed.fastq.gz"
 
 # Check if files exist
 if [[ ! -f ${R1} ]] || [[ ! -f ${R2} ]]; then
-    echo "Error: Read files not found for sample ${SAMPLE}"
     exit 1
 fi
 
