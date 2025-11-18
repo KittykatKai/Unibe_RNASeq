@@ -20,11 +20,11 @@ OUTPUT_FILE="${OUTPUT_DIR}/counts.txt"
 
 # Run featureCounts with explicit file list
 apptainer exec --bind /data ${CONTAINER} featureCounts \
-    -p \
-    -s 2 \
-    -T ${SLURM_CPUS_PER_TASK} \
-    -a ${ANNOTATION_GTF} \
-    -o ${OUTPUT_FILE} \
+    -p \ # Paired-end mode
+    -s 2 \ # Reverse stranded RF library
+    -T ${SLURM_CPUS_PER_TASK} \ # Number of threads 
+    -a ${ANNOTATION_GTF} \ # Annotation file
+    -o ${OUTPUT_FILE} \ # Output file 
     ${BAM_DIR}/SRR7821949.sorted.bam \
     ${BAM_DIR}/SRR7821950.sorted.bam \
     ${BAM_DIR}/SRR7821951.sorted.bam \
