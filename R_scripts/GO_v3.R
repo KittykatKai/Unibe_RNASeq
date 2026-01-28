@@ -4,7 +4,8 @@ library(org.Mm.eg.db)
 library(ggplot2)
 library(enrichplot)
 
-load("DE_DKO_adj_inputs.RData")
+
+load("downstream_inputs/DE_DKO_adj_inputs.RData")
 
 # GO enrichment - fyi it does NOT account for gene counts, only labels -----------
 # GO enrichment - all DE genes
@@ -79,7 +80,4 @@ print(up_DE_DKO_adj_dotplot)
 print(down_DE_DKO_adj_dotplot)
 
 dev.off()
-
-# nuclear option
-save.image("GO.RData")
 
