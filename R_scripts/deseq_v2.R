@@ -8,7 +8,7 @@ library(ggplot2)
 counts_file <- read.table("counts.txt", header=TRUE, comment.char="#", check.names=FALSE)
 # create df of raw counts, no annotation info
 raw_counts_df <- counts_file[7:ncol(counts_file)]
-# replace shitty full path colnames using pre-made samplenames.txt
+# replace full path colnames using pre-made samplenames.txt
 samplenames <- read.delim('samplenames.txt')
 colnames(raw_counts_df) <- samplenames$Sample
 # set row names = the gene ID
@@ -211,3 +211,4 @@ DE_DKO_renamed <- res_DKO_list$DE_renamed
 
 save(res_DKO,DE_DKO, DE_DKO_upregulated, DE_DKO_downregulated, DE_DKO_renamed, counts_file,
      file = "downstream_inputs/DE_DKO_inputs.RData")
+
