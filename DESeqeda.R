@@ -1,19 +1,15 @@
 library("DESeq2")
-library("pheatmap")
-library("biomaRt")
-library("org.Mm.eg.db")
-library("clusterProfiler")
-
-BiocManager::install("org.Mm.eg.db")
+library(biomaRt)
+library(ggplot2)
 
 # loading in featureCounts data -------------------------------------------
 
 # load counts.txt as a data frame
-counts_file <- read.table("counts.txt", header=TRUE, comment.char="#", check.names=FALSE)
+counts_file <- read.table("raw_inputfiles/counts.txt", header=TRUE, comment.char="#", check.names=FALSE)
 # create df of raw counts, no annotation info
 raw_counts_df <- counts_file[7:ncol(counts_file)]
 # replace shitty full path colnames using pre-made samplenames.txt
-samplenames <- read.delim('samplenames.txt')
+samplenames <- read.delim('raw_inputfiles/samplenames.txt')
 colnames(raw_counts_df) <- samplenames$Sample
 # set row names = the gene ID
 rownames(raw_counts_df) <- counts_file$Geneid
@@ -52,8 +48,23 @@ dds <- DESeqDataSetFromMatrix(countData = raw_counts_df,
 
 dds <- DESeq(dds)
 
-# replacing ENSMUS whatever BS ensembl IDs with real names ----------------
+# DESeq initial visualizations: DispEsts, pca -------------------
 
+# open pdf device for saving plots
+pdf(file = "plots/deseq.pdf",   # The directory you want to save the file in
+    width = 8, # The width of the plot in inches
+    height = 8) # The height of the plot in inches
+
+# variance stabilizing transform, plot disp ests for quality control / fit
+ntd <- vst(dds, blind=TRUE) # ntd = "normalized transformed data"
+plotDispEsts(dds, main = "dispersion estimates following VST")
+
+# pca
+plot_pca <- plotPCA(ntd, intgroup=c("type","condition")) + # intgroup just chooses how to color the dots, no impact on PCA
+  ggtitle("PCA of normalized transformed DESeq2 data (VST)") 
+print(plot_pca)
+
+# set up ENSEMBL -> gene symbol lookup for making human-readable labels --------
 # connect to Ensembl
 ensembl <- useMart("ensembl", dataset="mmusculus_gene_ensembl")
 
@@ -69,80 +80,113 @@ annot <- getBM(attributes=c('ensembl_gene_id','mgi_symbol'),
 gene_symbols <- annot$mgi_symbol
 names(gene_symbols) <- annot$ensembl_gene_id
 
-# replace rownames with gene symbols
-rownames(dds) <- gene_symbols[rownames(dds)]
-
-
-# DESeq initial visualizations: DispEsts, pheatmap, pca -------------------
-
-# variance stabilizing transform, plot disp ests for quality control / fit
-ntd <- vst(dds, blind=TRUE) # ntd = "normalized transformed data"
-plotDispEsts(dds, main = "dispersion estimates following VST")
-
-# heatmap of topgenes
-# topgenes top 100 expressed genes
-topgenes_exp <- order(rowMeans(counts(dds, normalized=TRUE)),
-                      decreasing=TRUE)[1:100]
-
-# Get the variance of each gene across samples
-gene_var <- apply(assay(ntd), 1, var) # use assay() to extract matrix from ntd... cuz ntd is not a data frame...
-
-# topgenes top 20 VARIANT genes
-topgenes_var <- order(gene_var,
-                      decreasing=TRUE)[1:20]
-
-annotation_df <- as.data.frame(colData(dds)[,c("type","condition")])
-# make pheatmap
-pheatmap(assay(ntd)[topgenes_var,], cluster_rows=TRUE, show_rownames=TRUE,
-         cluster_cols=TRUE, annotation_col=annotation_df, main='top 20 variant genes')
-
-# pca
-plotPCA(ntd, intgroup=c("type","condition")) # intgroup just chooses how to color the dots, no impact on PCA
-
 # DESeq results, cross-comparisons ----------------------------------------
 
 resultsNames(dds) # check this output. it will tell you names of each valid effect / comparison that DESeq found
 
-# checking res: "effect of case vs control, for condition (WT)". due to the interaction it only extracts the main effect by default, which is only in WT
-res_WT <- results(dds, name = "condition_Case_vs_Control")
+### define extractres() function to extract nice results for each DESeq2 contrast name ###
+extractres <- function(contrastTerm) {
+  # inputs: contrastTerm (str or vector): build it using resultsNames outputs only
+  # outputs a list:
+  #   res: DESeqResultObject
+  #   DE: DESeqResultObject filtered by p < 0.05 and abs(log2fc) > 1, "differentially expressed" genes
+  #   DE_upregulated: DE filtered by log2fc > 1, "upregulated" genes
+  #   DE_downregulated: DE filtered by log2fc < -1, "downregulated" genes
+  #   DE_renamed: copy of DE df with ENSEMBL IDs replaced by human-readable gene symbols, for easier labeling
+  
+  # filtering by padj < 0.05 and log2foldchange greater than 1
+  res <- results(dds, contrast = list(contrastTerm))
+  DE <- res[!is.na(res$padj) & res$padj < 0.05 & abs(res$log2FoldChange) > 1, ]
+  
+  # split df into up and down regulated
+  DE_upregulated <- DE[DE$log2FoldChange > 1, ]
+  DE_downregulated <- DE[DE$log2FoldChange < -1, ]
+  
+  # adding directional columns to original df for easier coloring
+  DE$direction[rownames(DE) %in% rownames(DE_upregulated)] <- "Upregulated"
+  DE$direction[rownames(DE) %in% rownames(DE_downregulated)] <- "Downregulated"
+  
+  res$direction <- "Not significant"
+  res$direction[rownames(res) %in% rownames(DE_upregulated)] <- "Upregulated"
+  res$direction[rownames(res) %in% rownames(DE_downregulated)] <- "Downregulated"
+  
+  # create human-readable gene symbols df for easier labeling
+  DE_mapped_symbols <- gene_symbols[rownames(DE)]
+  DE_renamed <- DE
+  rownames(DE_renamed) <- ifelse(is.na(DE_mapped_symbols), rownames(DE), DE_mapped_symbols)
+  
+  return(list(res = res, 
+              DE = DE, 
+              DE_upregulated = DE_upregulated, 
+              DE_downregulated = DE_downregulated,
+              DE_renamed = DE_renamed))
+}
 
-DE_WT <- res_WT[!is.na(res_WT$padj) & res_WT$padj < 0.05, ]
-DEsum_WT <- sum(res_WT$padj < 0.05, na.rm=TRUE)
-up_WT <- sum(DE_WT$log2FoldChange > 0, na.rm=TRUE)
-down_WT <- sum(DE_WT$log2FoldChange < 0, na.rm=TRUE)
+# checking res: "effect of DKO vs WT, for healthy case (default condition)". 
+res_healthy_list <- extractres(c("type_DKO_vs_WT"))
+
+# checking res: "effect of DKO vs WT, for diseased case". 
+res_diseased_list <- extractres(c("type_DKO_vs_WT", "typeDKO.conditionCase"))
+
+# checking res: "effect of case vs control, for condition (WT)". due to the interaction it only extracts the main effect by default, which is only in WT
+res_WT_list <- extractres("condition_Case_vs_Control")
 
 # checking res: "effect of case vs control, for DKO". this is the BULK difference and is not adjusted by the observations in WT
-res_DKO <- results(dds, contrast = list(
-  c("condition_Case_vs_Control", "typeDKO.conditionCase")))
+res_DKO_list <- extractres(c("condition_Case_vs_Control", "typeDKO.conditionCase"))
 
-DE_DKO <- res_DKO[!is.na(res_DKO$padj) & res_DKO$padj < 0.05, ]
-DEsum_DKO <- sum(res_DKO$padj < 0.05, na.rm=TRUE)
-up_DKO <- sum(DE_DKO$log2FoldChange > 0, na.rm=TRUE)
-down_DKO <- sum(DE_DKO$log2FoldChange < 0, na.rm=TRUE)
+# checking res for interaction term: "effect of case vs healthy control, for DKO, ADJUSTED by effect in WT". this is the ADDITIONAL difference, beyond what changes in WT
+res_DKO_adj_list <- extractres("typeDKO.conditionCase")
 
+# save all workspace objects ----------------------------------------------
+# save pdf device for plots
+dev.off()
 
-# checking res for interaction term: "effect of case vs control, for DKO, ADJUSTED by effect in WT". this is the ADDITIONAL difference, beyond what changes in WT
-res_DKO_adj <- results(dds, name = "typeDKO.conditionCase")
+# minimal inputs needed for analysis of DE_DKO_adj in GO.R, volcanoplot.R
+res_DKO_adj <- res_DKO_adj_list$res
+DE_DKO_adj <- res_DKO_adj_list$DE
+DE_DKO_adj_upregulated <- res_DKO_adj_list$DE_upregulated
+DE_DKO_adj_downregulated <- res_DKO_adj_list$DE_downregulated
+DE_DKO_adj_renamed <- res_DKO_adj_list$DE_renamed
 
-DE_DKO_adj <- res_DKO_adj[!is.na(res_DKO_adj$padj) & res_DKO_adj$padj < 0.05, ]
-DEsum_DKO_adj <- sum(res_DKO_adj$padj < 0.05, na.rm=TRUE)
-up_DKO_adj <- sum(DE_DKO_adj$log2FoldChange > 0, na.rm=TRUE)
-down_DKO_adj <- sum(DE_DKO_adj$log2FoldChange < 0, na.rm=TRUE)
+save(res_DKO_adj,DE_DKO_adj, DE_DKO_adj_upregulated, DE_DKO_adj_downregulated, DE_DKO_adj_renamed, counts_file,
+     file = "downstream_inputs/DE_DKO_adj_inputs.RData")
 
-res_summary <- rbind(
-  c(up_WT, down_WT, DEsum_WT),
-  c(up_DKO, down_DKO, DEsum_DKO),
-  c(up_DKO_adj, down_DKO_adj, DEsum_DKO_adj)
-)
+# save res_healthy
+res_healthy <- res_healthy_list$res
+DE_healthy <- res_healthy_list$DE
+DE_healthy_upregulated <- res_healthy_list$DE_upregulated
+DE_healthy_downregulated <- res_healthy_list$DE_downregulated
+DE_healthy_renamed <- res_healthy_list$DE_renamed
 
-rownames(res_summary) <- c("WT", "DKO", "DKO - WT")
-colnames(res_summary) <- c("upregulated", "downregulated", "total count")
+save(res_healthy,DE_healthy, DE_healthy_upregulated, DE_healthy_downregulated, DE_healthy_renamed, counts_file,
+     file = "downstream_inputs/DE_healthy_inputs.RData")
 
-print(res_summary)
+# save res_diseased
+res_diseased <- res_diseased_list$res
+DE_diseased <- res_diseased_list$DE
+DE_diseased_upregulated <- res_diseased_list$DE_upregulated
+DE_diseased_downregulated <- res_diseased_list$DE_downregulated
+DE_diseased_renamed <- res_diseased_list$DE_renamed
 
-paste0('DE genes caused by disease in WT: ', DEsum_WT, '. upregulated: ', up_WT, ', downregulated: ', down_WT)
-paste0('DE genes caused by disease in DKO: ', DEsum_DKO, '. upregulated: ', up_DKO, ', downregulated: ', down_DKO)
-paste0('DE genes caused by disease in DKO, novel as compared to WT: ', DEsum_DKO_adj, '. upregulated: ', up_DKO_adj, ', downregulated: ', down_DKO_adj)
+save(res_diseased,DE_diseased, DE_diseased_upregulated, DE_diseased_downregulated, DE_diseased_renamed, counts_file,
+     file = "downstream_inputs/DE_diseased_inputs.RData")
 
-save.image("deseq.RData")
+# save res_WT
+res_WT <- res_WT_list$res
+DE_WT <- res_WT_list$DE
+DE_WT_upregulated <- res_WT_list$DE_upregulated
+DE_WT_downregulated <- res_WT_list$DE_downregulated
+DE_WT_renamed <- res_WT_list$DE_renamed
 
+save(res_WT,DE_WT, DE_WT_upregulated, DE_WT_downregulated, DE_WT_renamed, counts_file,
+     file = "downstream_inputs/DE_WT_inputs.RData")
+
+# save res_DKO
+res_DKO <- res_DKO_list$res
+DE_DKO <- res_DKO_list$DE
+DE_DKO_upregulated <- res_DKO_list$DE_upregulated
+DE_DKO_downregulated <- res_DKO_list$DE_downregulated
+DE_DKO_renamed <- res_DKO_list$DE_renamed
+
+save(res_DKO,DE_DKO, DE_DKO_upregulated, DE_DKO_downregulated, DE_DKO_renamed, counts_file,
+     file = "downstream_inputs/DE_DKO_inputs.RData")
