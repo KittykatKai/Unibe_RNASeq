@@ -1,15 +1,15 @@
 library("DESeq2")
-library("biomaRt")
+library(biomaRt)
 library(ggplot2)
 
 # loading in featureCounts data -------------------------------------------
 
 # load counts.txt as a data frame
-counts_file <- read.table("counts.txt", header=TRUE, comment.char="#", check.names=FALSE)
+counts_file <- read.table("raw_inputfiles/counts.txt", header=TRUE, comment.char="#", check.names=FALSE)
 # create df of raw counts, no annotation info
 raw_counts_df <- counts_file[7:ncol(counts_file)]
-# replace full path colnames using pre-made samplenames.txt
-samplenames <- read.delim('samplenames.txt')
+# replace shitty full path colnames using pre-made samplenames.txt
+samplenames <- read.delim('raw_inputfiles/samplenames.txt')
 colnames(raw_counts_df) <- samplenames$Sample
 # set row names = the gene ID
 rownames(raw_counts_df) <- counts_file$Geneid
@@ -47,27 +47,6 @@ dds <- DESeqDataSetFromMatrix(countData = raw_counts_df,
 # "type:condition" means the "condition" output will specifically show "changes based on condition, for each type, compared to the reference type (which is WT)". it also adds a new resultName which lets us specifically view "changes based on condition, for DKO, beyond the reference type"
 
 dds <- DESeq(dds)
-
-# replacing ENSMUS whatever BS ensembl IDs with real names ----------------
-
-# connect to Ensembl
-ensembl <- useMart("ensembl", dataset="mmusculus_gene_ensembl")
-
-gene_ids <- rownames(dds)
-
-# map Ensembl IDs to gene symbols
-annot <- getBM(attributes=c('ensembl_gene_id','mgi_symbol'),
-               filters='ensembl_gene_id',
-               values=gene_ids,
-               mart=ensembl)
-
-# make a named vector
-gene_symbols <- annot$mgi_symbol
-names(gene_symbols) <- annot$ensembl_gene_id
-
-# replace rownames with gene symbols
-rownames(dds) <- gene_symbols[rownames(dds)]
-
 
 # DESeq initial visualizations: DispEsts, pca -------------------
 
@@ -211,4 +190,3 @@ DE_DKO_renamed <- res_DKO_list$DE_renamed
 
 save(res_DKO,DE_DKO, DE_DKO_upregulated, DE_DKO_downregulated, DE_DKO_renamed, counts_file,
      file = "downstream_inputs/DE_DKO_inputs.RData")
-
