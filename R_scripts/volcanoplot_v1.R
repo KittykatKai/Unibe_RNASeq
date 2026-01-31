@@ -39,5 +39,6 @@ print(DE_DKO_adj_volcano)
 
 dev.off()
 
-# nuclear option
+# save data file
+
 save.image("volcanoplot.RData")
