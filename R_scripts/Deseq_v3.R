@@ -8,7 +8,7 @@ library(ggplot2)
 counts_file <- read.table("raw_inputfiles/counts.txt", header=TRUE, comment.char="#", check.names=FALSE)
 # create df of raw counts, no annotation info
 raw_counts_df <- counts_file[7:ncol(counts_file)]
-# replace shitty full path colnames using pre-made samplenames.txt
+# replace full path colnames using pre-made samplenames.txt
 samplenames <- read.delim('raw_inputfiles/samplenames.txt')
 colnames(raw_counts_df) <- samplenames$Sample
 # set row names = the gene ID
