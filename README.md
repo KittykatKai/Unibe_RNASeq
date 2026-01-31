@@ -25,7 +25,7 @@ Raw data input files are used by deseq_v3.R and GO_v3.R:
 - samplenames.txt: copy-pasted tab-delimited table of sample IDs and experimental group (ex. "Blood_WT_Case")
 
 Pipline:
-1. deseq_v3.R: DESeq2 2-factor design (WT/DKO, Case/Control): type + condition + type:condition. Saves DESeqResultsObjects for all contrasts into /downstream_inputs that can be used for downstream scripts
+1. Deseq_v3.R: DESeq2 2-factor design (WT/DKO, Case/Control): type + condition + type:condition. Saves DESeqResultsObjects for all contrasts into /downstream_inputs that can be used for downstream scripts
 2. GO_v3.R: GO enrichment analysis and dotplots for DE_DKO_adj. Creates three plots: one for all genes, one within subset of downregulated genes, one within subset of upregulated genes
 3. GeneExtractor.R: Creates counts, summary statistics, and boxplots for pre selected genes of interest.
 4. volcanoplot_v1.R: creates volcano plots for DE_DKO_adj and DE_diseased. Also creates an alternate version which overlays the significant type I IFN genes on the plot.
